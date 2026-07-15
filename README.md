@@ -116,26 +116,63 @@ Typical flow: call availability, then book when `available` is true. Design deta
 
 ## AI Collaboration Narrative
 
-How AI was used on this submission, how output was verified, and how quality was owned.
+This project was developed using GenAI as an engineering assistant rather than an autonomous developer. AI accelerated design exploration, boilerplate generation, and documentation, while all architectural decisions, business rules, and code quality remained my responsibility.
 
-### High-level strategy for guiding the AI
+### AI-Assisted Development Strategy
 
-1. Treated Scenario A’s three requirements as the acceptance criteria—not the AI’s default stack choices.
-2. Kept a thin API surface (availability + book); removed catalogue/list/health extras after review.
-3. Used AI for scaffolding and iteration; humans decided product rules (skills table, capacity response, lock-on-book).
-4. Separated demo correctness from later hardening (e.g. race discussion led to pessimistic locks on book only).
+AI was primarily used to:
 
-### Process for verifying and refining AI output
+- Summarize and analyze the assessment requirements.
+- Generate initial project structure and boilerplate code.
+- Explore alternative architecture and concurrency strategies.
+- Draft REST API contracts and documentation.
+- Suggest unit test scenarios and refactoring opportunities.
 
-1. Mapped each change back to the brief (e.g. “qualified” → `technician_skills`).
-2. Ran `./gradlew test` after material changes (including concurrent booking expectations).
-3. Manually checked availability → book → capacity drop / 409 on conflict.
-4. Challenged AI designs (lock-all vs lock-pair, pool limits, burst behaviour) instead of accepting the first draft.
-5. Refined the availability contract to a capacity payload for clearer demos.
+Rather than accepting AI suggestions directly, every proposal was evaluated against the business requirements of Scenario A before being adopted.
 
-### Ensuring final quality
+Examples of engineering decisions include:
 
-- Owned final behaviour after local build/test (locks on book, capacity on check, 409 on failed book).
-- Core logic covered in `AppointmentServiceTest` (happy path, sequential double-book, concurrent scarce skill).
-- This README is enough for a grader to build, run, and test without the chat history.
-- Limits are explicit: cancel status exists but no cancel API; extreme burst control is out of scope.
+- Choosing a **modular monolith** instead of microservices for the assessment.
+- Using **pessimistic locking** to prevent double booking under concurrent requests.
+- Keeping only two public APIs (`Availability` and `Create Appointment`) to align with the required acceptance criteria.
+- Introducing **Outbox Pattern**, Redis, Read Replicas, and Database Sharding only as future scalability improvements rather than unnecessary complexity in the initial implementation.
+
+---
+
+### Verification and Refinement Process
+
+Every AI-generated suggestion was manually reviewed and validated before becoming part of the solution.
+
+The verification process included:
+
+- Mapping every implementation back to the assessment requirements.
+- Reviewing generated business logic and transaction boundaries.
+- Validating concurrency behaviour for simultaneous booking requests.
+- Running the complete unit test suite after significant changes.
+- Manually testing the booking workflow, including:
+  - Availability check
+  - Successful booking
+  - Booking conflicts (`409 Conflict`)
+  - Capacity updates after successful appointments
+
+AI recommendations were challenged whenever they conflicted with production-oriented design principles. For example:
+
+- Rejected optimistic locking for the booking workflow because it could lead to failed retries under high contention.
+- Rejected introducing Kafka into the synchronous booking transaction, limiting Kafka to future asynchronous processes such as notifications and analytics.
+- Simplified the public API surface to match the assessment scope while documenting future production enhancements separately.
+
+---
+
+### Quality Ownership
+
+Final code quality remained my responsibility throughout the project.
+
+Quality assurance included:
+
+- Manual review of all AI-generated code.
+- Refactoring for readability and maintainability.
+- Unit tests covering the core booking scenarios.
+- Verification of pessimistic locking behaviour under concurrent requests.
+- Validation that all business rules matched the assessment requirements.
+
+The submitted solution represents the final reviewed implementation rather than raw AI-generated output. AI accelerated development, but all architectural decisions, trade-offs, testing, and production considerations were validated and owned by me.
