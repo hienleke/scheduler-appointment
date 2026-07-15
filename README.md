@@ -48,22 +48,30 @@ docker compose up -d postgres
 ./gradlew bootRun
 ```
 
-DB defaults: `localhost:5432` / db·user·password = `scheduler`.
-
 On first empty database, `DataSeeder` loads demo dealerships, service types, bays, technicians (with skills), customers, and vehicles.
 
-**Get UUIDs for API calls:**
+**Get UUIDs for API calls (database client):**
 
-```bash
-docker exec -it $(docker ps -qf "ancestor=postgres:16-alpine") \
-  psql -U scheduler -d scheduler -c "SELECT id, name FROM customers;"
-docker exec -it $(docker ps -qf "ancestor=postgres:16-alpine") \
-  psql -U scheduler -d scheduler -c "SELECT id, vin FROM vehicles;"
-docker exec -it $(docker ps -qf "ancestor=postgres:16-alpine") \
-  psql -U scheduler -d scheduler -c "SELECT id, name FROM service_types;"
-docker exec -it $(docker ps -qf "ancestor=postgres:16-alpine") \
-  psql -U scheduler -d scheduler -c "SELECT id, name FROM dealerships;"
+Connect with any PostgreSQL client (DBeaver, pgAdmin, TablePlus, DataGrip, VS Code SQLTools, etc.):
+
+| Setting  | Value        |
+|----------|--------------|
+| Host     | `localhost`  |
+| Port     | `5432`       |
+| Database | `scheduler`  |
+| User     | `scheduler`  |
+| Password | `scheduler`  |
+
+Then run:
+
+```sql
+SELECT id, name FROM customers;
+SELECT id, vin FROM vehicles;
+SELECT id, name FROM service_types;
+SELECT id, name FROM dealerships;
 ```
+
+Copy the UUIDs into the API request body below.
 
 ## Test
 
