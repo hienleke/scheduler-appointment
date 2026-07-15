@@ -141,11 +141,146 @@ Seed on first empty DB (`DataSeeder`). Tests do not use the Docker volume.
 
 ---
 
-## 8. Limitations
+## 8. Scalability & Future Architecture
 
-- Locking all candidate bays/techs serialises bookings per dealership (OK for demo scale).
-- Capacity can change between availability and book; book is authoritative.
-- No cancel/reschedule HTTP API yet; no burst queue/rate-limit.
+The current implementation is intentionally designed as a **modular monolith** to keep the solution simple while satisfying the assessment requirements. The architecture can evolve incrementally as traffic increases.
+
+### Phase 1 — Assessment / Small Scale
+
+```text
+Client
+   │
+Spring Boot
+   │
+PostgreSQL
+```
+
+- Single Spring Boot application
+- Single PostgreSQL instance
+- ACID transaction with pessimistic locking
+- Suitable for thousands of appointments per day
+
+---
+
+### Phase 2 — Horizontal Scaling
+
+```text
+                Load Balancer
+                      │
+      ┌───────────────┼───────────────┐
+      │               │               │
+    API Pod 1      API Pod 2      API Pod 3
+      │               │               │
+      └───────────────┼───────────────┘
+                      │
+                 PostgreSQL
+```
+
+Changes:
+
+- Stateless application
+- Kubernetes horizontal scaling
+- HikariCP connection pool
+- Database indexes on appointment lookup
+- Short transactions to minimize lock contention
+
+The pessimistic lock remains effective because all pods coordinate through the same PostgreSQL instance.
+
+---
+
+### Phase 3 — Read Optimization
+
+```text
+                API Pods
+                    │
+         ┌──────────┴──────────┐
+         │                     │
+      Redis Cache        PostgreSQL
+                               │
+                     Read Replica(s)
+```
+
+Redis caches relatively static reference data such as:
+
+- Service Types
+- Dealership information
+- Technician skills
+- Business hours
+
+Appointment availability is **not cached**, because it changes frequently and stale data could result in incorrect booking suggestions.
+
+Read replicas serve reporting and lookup APIs, while all booking requests continue using the Primary database.
+
+---
+
+### Phase 4 — Event Driven Extension
+
+```text
+Appointment Service
+        │
+ PostgreSQL
+        │
+   Outbox Table
+        │
+      Kafka
+        │
+ ┌──────┼─────────────┐
+ │      │             │
+Notification  Audit  Analytics
+```
+
+Booking remains a synchronous transaction.
+
+Kafka is introduced only for asynchronous processing such as:
+
+- Email notifications
+- SMS
+- Audit logs
+- Analytics
+- Integration with external systems
+
+This prevents external service failures from affecting appointment creation.
+
+---
+
+### Concurrency Strategy
+
+The write path remains strongly consistent:
+
+1. Begin transaction.
+2. Lock candidate Service Bays.
+3. Lock candidate Technicians.
+4. Verify no overlapping appointment exists.
+5. Insert Appointment.
+6. Commit.
+
+Only the booking endpoint acquires pessimistic locks.
+
+The availability endpoint performs a best-effort read without locking to maximize throughput.
+
+---
+
+### Future Improvements
+
+Possible production enhancements include:
+
+- Appointment cancellation and rescheduling
+- Database sharding by Dealership
+- Distributed cache invalidation
+- Optimistic locking for low-contention resources
+- Rate limiting for abusive clients
+- OpenTelemetry distributed tracing
+- Circuit breaker for external integrations
+
+
+
+## 9. Limitations
+
+- The current implementation locks all candidate bays and technicians within a dealership during booking. This keeps the implementation simple but reduces concurrency under very high contention.
+- Availability results are advisory only. Another booking may succeed before the user submits the final booking request.
+- No authentication or authorization.
+- No appointment cancellation or rescheduling API.
+- No asynchronous notification pipeline (future enhancement via Outbox + Kafka).
 
 ---
 
