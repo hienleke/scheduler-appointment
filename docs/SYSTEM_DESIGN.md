@@ -143,136 +143,193 @@ Seed on first empty DB (`DataSeeder`). Tests do not use the Docker volume.
 
 ## 8. Scalability & Future Architecture
 
-The current implementation is intentionally designed as a **modular monolith** to keep the solution simple while satisfying the assessment requirements. The architecture can evolve incrementally as traffic increases.
+The current implementation is intentionally designed as a **modular monolith** to satisfy the assessment requirements while remaining easy to maintain. As the platform grows, the architecture can evolve incrementally without changing the core booking business logic.
 
 ### Phase 1 — Assessment / Small Scale
 
 ```text
-Client
-   │
-Spring Boot
-   │
-PostgreSQL
+             Client
+                │
+         Spring Boot API
+                │
+        PostgreSQL Primary
 ```
+
+Characteristics
 
 - Single Spring Boot application
-- Single PostgreSQL instance
-- ACID transaction with pessimistic locking
-- Suitable for thousands of appointments per day
+- Single PostgreSQL database
+- ACID transactions
+- Pessimistic locking for booking
+- Suitable for small and medium dealerships
 
 ---
 
-### Phase 2 — Horizontal Scaling
+### Phase 2 — Horizontal Application Scaling
 
 ```text
-                Load Balancer
-                      │
-      ┌───────────────┼───────────────┐
-      │               │               │
-    API Pod 1      API Pod 2      API Pod 3
-      │               │               │
-      └───────────────┼───────────────┘
-                      │
-                 PostgreSQL
+                 Load Balancer
+                       │
+      ┌────────────────┼────────────────┐
+      │                │                │
+   API Pod 1       API Pod 2       API Pod 3
+      │                │                │
+      └────────────────┼────────────────┘
+                       │
+               PostgreSQL Primary
 ```
 
-Changes:
+Changes
 
-- Stateless application
-- Kubernetes horizontal scaling
+- Stateless Spring Boot application
+- Kubernetes Horizontal Pod Autoscaler
 - HikariCP connection pool
-- Database indexes on appointment lookup
-- Short transactions to minimize lock contention
+- Proper database indexing
+- Short-lived transactions
 
-The pessimistic lock remains effective because all pods coordinate through the same PostgreSQL instance.
+Although multiple application instances exist, every booking transaction still coordinates through the same PostgreSQL database. Pessimistic locking continues to prevent double booking.
 
 ---
 
-### Phase 3 — Read Optimization
+### Phase 3 — Read Scaling
 
 ```text
-                API Pods
-                    │
-         ┌──────────┴──────────┐
-         │                     │
-      Redis Cache        PostgreSQL
-                               │
-                     Read Replica(s)
+                   API Pods
+                       │
+          ┌────────────┴────────────┐
+          │                         │
+      Redis Cache          PostgreSQL Cluster
+                                 │
+                    Primary + Read Replicas
 ```
 
-Redis caches relatively static reference data such as:
+Redis caches relatively static reference data:
 
 - Service Types
 - Dealership information
 - Technician skills
 - Business hours
 
-Appointment availability is **not cached**, because it changes frequently and stale data could result in incorrect booking suggestions.
+Read replicas serve read-only APIs such as:
 
-Read replicas serve reporting and lookup APIs, while all booking requests continue using the Primary database.
+- Appointment history
+- Vehicle lookup
+- Dealership information
+
+Booking requests are always routed to the Primary database to guarantee transactional consistency.
+
+Appointment availability is intentionally **not cached**, because stale data may lead to incorrect booking suggestions.
 
 ---
 
-### Phase 4 — Event Driven Extension
+### Phase 4 — Event-Driven Integration
 
 ```text
-Appointment Service
-        │
- PostgreSQL
-        │
-   Outbox Table
-        │
-      Kafka
-        │
- ┌──────┼─────────────┐
- │      │             │
-Notification  Audit  Analytics
+              Appointment Service
+                      │
+               PostgreSQL Primary
+                      │
+                 Outbox Table
+                      │
+                     Kafka
+                      │
+      ┌───────────────┼────────────────┐
+      │               │                │
+ Notification      Audit Log      Analytics
 ```
 
-Booking remains a synchronous transaction.
+Appointment creation remains a synchronous transaction.
 
-Kafka is introduced only for asynchronous processing such as:
+Kafka is used only for asynchronous processing, including:
 
 - Email notifications
-- SMS
-- Audit logs
+- SMS notifications
+- Audit logging
 - Analytics
-- Integration with external systems
+- External system integration
 
-This prevents external service failures from affecting appointment creation.
+This ensures failures in downstream systems do not affect the booking transaction.
 
 ---
 
-### Concurrency Strategy
+### Phase 5 — Scaling to 1 Million Users
 
-The write path remains strongly consistent:
+```text
+                        API Gateway
+                             │
+          ┌──────────────────┼──────────────────┐
+          │                  │                  │
+  Appointment Pods   Availability Pods   Future Services
+          │                  │
+          └──────────────────┼──────────────────┘
+                             │
+                       Redis Cluster
+                             │
+                 PostgreSQL Cluster
+            Primary + Multiple Read Replicas
+                             │
+                 Database Sharding (Future)
+                             │
+                           Kafka
+```
 
-1. Begin transaction.
-2. Lock candidate Service Bays.
-3. Lock candidate Technicians.
-4. Verify no overlapping appointment exists.
-5. Insert Appointment.
-6. Commit.
+At enterprise scale, the architecture evolves with the following improvements:
 
-Only the booking endpoint acquires pessimistic locks.
+#### Horizontal Scaling
 
-The availability endpoint performs a best-effort read without locking to maximize throughput.
+Application instances remain stateless and can be scaled independently behind a Load Balancer.
+
+#### Primary / Replica Database
+
+- All booking transactions are executed on the Primary database.
+- Read-only APIs are served from Read Replicas.
+- This significantly reduces read pressure while preserving strong consistency for booking.
+
+#### Database Sharding
+
+When the number of dealerships becomes very large, data can be partitioned by Dealership.
+
+```text
+Dealer A  → Database A
+
+Dealer B  → Database B
+
+Dealer C  → Database C
+```
+
+Each booking transaction locks only resources within its own dealership, greatly reducing lock contention and improving scalability.
+
+#### Redis Cluster
+
+Redis stores only relatively static reference data.
+
+It is **not** the source of truth for appointment booking. Transaction consistency is always guaranteed by PostgreSQL.
+
+#### Concurrency Strategy
+
+Every booking follows the same transactional flow:
+
+1. Begin transaction
+2. Lock candidate Service Bays (`FOR UPDATE`)
+3. Lock candidate Technicians (`FOR UPDATE`)
+4. Verify no overlapping appointments exist
+5. Create Appointment
+6. Commit transaction
+
+Transactions are intentionally kept short to minimize lock contention, allowing multiple application instances to process bookings concurrently.
 
 ---
 
 ### Future Improvements
 
-Possible production enhancements include:
-
 - Appointment cancellation and rescheduling
-- Database sharding by Dealership
 - Distributed cache invalidation
-- Optimistic locking for low-contention resources
-- Rate limiting for abusive clients
+- Rate limiting
 - OpenTelemetry distributed tracing
-- Circuit breaker for external integrations
-
-
+- Circuit breakers
+- Idempotency keys
+- Dead Letter Queue
+- Auto-scaling based on CPU and request throughput
 
 ## 9. Limitations
 
