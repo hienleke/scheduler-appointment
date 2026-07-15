@@ -1,6 +1,6 @@
 # Appointment Scheduler — Scenario A
 
-**Domain:** Ownership · Unified Service Scheduler (Keyloop assessment)
+**Domain:** Ownership · Unified Service Scheduler 
 
 | Deliverable | Location |
 |-------------|----------|

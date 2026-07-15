@@ -45,8 +45,8 @@ public class DataSeeder {
             ServiceType tireRotation = saveServiceType(serviceTypeRepository, "Tire Rotation", 45);
             ServiceType fullInspection = saveServiceType(serviceTypeRepository, "Full Inspection", 90);
 
-            Dealership hcmDealership = saveDealership(dealershipRepository, "Keyloop Demo Dealership", "Asia/Ho_Chi_Minh");
-            Dealership hanoiDealership = saveDealership(dealershipRepository, "Keyloop Hanoi Center", "Asia/Ho_Chi_Minh");
+            Dealership hcmDealership = saveDealership(dealershipRepository, " Demo Dealership", "Asia/Ho_Chi_Minh");
+            Dealership hanoiDealership = saveDealership(dealershipRepository, " Hanoi Center", "Asia/Ho_Chi_Minh");
 
             saveBay(serviceBayRepository, hcmDealership, "Bay-1");
             saveBay(serviceBayRepository, hcmDealership, "Bay-2");
