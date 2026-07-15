@@ -1,0 +1,27 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "type": "java",
+      "name": "SchedulerApplication",
+      "request": "launch",
+      "mainClass": "com.example.scheduler.SchedulerApplication",
+      "projectName": "scheduler-appointment"
+    },
+    {
+      "type": "java",
+      "name": "Debug Scheduler (local)",
+      "request": "launch",
+      "mainClass": "com.example.scheduler.SchedulerApplication",
+      "projectName": "appointment-scheduler",
+      "env": {
+        "POSTGRES_HOST": "localhost",
+        "POSTGRES_PORT": "5432",
+        "POSTGRES_USER": "scheduler",
+        "POSTGRES_PASSWORD": "scheduler",
+        "POSTGRES_DB": "scheduler",
+        "PORT": "8080"
+      }
+    }
+  ]
+}
